@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>LeafScan — análise de folhas</title>
+  <meta name="theme-color" content="#0a100d" />
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/static/icon-192.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="LeafScan" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2334d399' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z'/%3E%3Cpath d='M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a100d;
+      --card: rgba(22, 32, 26, 0.72);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e8efe9;
+      --muted: #9db1a4;
+      --green: #34d399;
+      --green-deep: #059669;
+      --red: #f87171;
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html { -webkit-text-size-adjust: 100%; }
+    button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0; min-height: 100vh; min-height: 100dvh;
+      padding: 40px 20px calc(32px + env(safe-area-inset-bottom));
+      display: flex; flex-direction: column; align-items: center;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text);
+      position: relative; overflow-x: hidden;
+    }
+    .orb {
+      position: fixed; border-radius: 50%; filter: blur(90px); opacity: 0.16;
+      pointer-events: none; z-index: 0;
+    }
+    .orb.a { width: 480px; height: 480px; background: #10b981; top: -160px; left: -120px; animation: drift 16s ease-in-out infinite alternate; }
+    .orb.b { width: 420px; height: 420px; background: #0ea5e9; bottom: -180px; right: -120px; animation: drift 20s ease-in-out infinite alternate-reverse; }
+    @keyframes drift { from { transform: translate(0, 0); } to { transform: translate(60px, 40px); } }
+
+    header, main, footer { position: relative; z-index: 1; width: min(760px, 100%); }
+    header { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 28px; }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo svg { width: 40px; height: 40px; color: var(--green); }
+    .logo h1 { font-size: 1.9rem; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
+    .logo h1 span { background: linear-gradient(120deg, var(--green), #a7f3d0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    header p.sub { margin: 8px 0 0; color: var(--muted); font-size: 1.02rem; }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 24px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+      animation: rise 0.5s ease both;
+    }
+    .card + .card { margin-top: 20px; }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+    .dropzone {
+      border: 1.5px dashed rgba(255, 255, 255, 0.18); border-radius: 14px;
+      padding: 44px 20px; text-align: center; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .dropzone:hover, .dropzone.drag {
+      border-color: var(--green); background: rgba(52, 211, 153, 0.06);
+    }
+    .dropzone svg { width: 42px; height: 42px; color: var(--muted); margin-bottom: 10px; }
+    .dropzone.drag svg { color: var(--green); }
+    .dropzone p { margin: 0; color: var(--text); }
+    .dropzone .hint { margin-top: 8px; font-size: 0.85rem; color: var(--muted); }
+    .dropzone .link { color: var(--green); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+    .preview {
+      display: flex; gap: 16px; align-items: center;
+      background: rgba(0, 0, 0, 0.22); border: 1px solid var(--border); border-radius: 14px; padding: 14px;
+    }
+    .preview img {
+      width: 132px; height: 132px; object-fit: cover; border-radius: 10px; flex: none;
+      border: 1px solid var(--border);
+    }
+    .preview-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .preview-info .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .preview-info .size { color: var(--muted); font-size: 0.85rem; }
+
+    .actions { margin-top: 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    button { font: inherit; cursor: pointer; border: 0; border-radius: 11px; }
+    .primary {
+      padding: 12px 26px; font-weight: 700; font-size: 1rem; color: #06110b;
+      background: linear-gradient(135deg, var(--green), var(--green-deep));
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.28);
+      display: inline-flex; align-items: center; gap: 9px;
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.2s;
+    }
+    .primary svg { width: 19px; height: 19px; }
+    .primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(16, 185, 129, 0.36); }
+    .primary:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+    .ghost {
+      padding: 10px 18px; font-weight: 600; color: var(--text);
+      background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+    .ghost:hover { background: rgba(255, 255, 255, 0.12); }
+    .erro { display: none; margin: 0; color: #fca5a5; font-size: 0.92rem; }
+    .erro.show { display: block; animation: rise 0.3s ease both; }
+
+    .loading { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 34px 0 22px; }
+    .spinner {
+      width: 46px; height: 46px; border-radius: 50%;
+      border: 4px solid rgba(52, 211, 153, 0.18); border-top-color: var(--green);
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading p { margin: 0; color: var(--muted); }
+
+    .verdict {
+      display: inline-flex; align-items: center; gap: 8px; margin-bottom: 18px;
+      padding: 8px 16px; border-radius: 999px; font-weight: 700; font-size: 0.92rem;
+    }
+    .verdict small { font-weight: 500; color: inherit; opacity: 0.8; }
+    .verdict.ok { background: rgba(52, 211, 153, 0.13); color: #6ee7b7; }
+    .verdict.warn { background: rgba(251, 191, 36, 0.13); color: #fcd34d; }
+    .verdict.bad { background: rgba(248, 113, 113, 0.14); color: #fca5a5; }
+    .verdict .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .compare figure { margin: 0; }
+    .compare .imgwrap {
+      border-radius: 12px; overflow: hidden; border: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.25);
+    }
+    .compare img { display: block; width: 100%; height: auto; transition: transform 0.3s; }
+    .compare figure:hover img { transform: scale(1.025); }
+    .compare figcaption { margin-top: 8px; font-size: 0.85rem; color: var(--muted); text-align: center; }
+
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
+    .stat {
+      border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .stat .label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .stat .num { font-size: 1.7rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+    .stat.boa { background: rgba(52, 211, 153, 0.08); } .stat.boa .num { color: #6ee7b7; }
+    .stat.mancha { background: rgba(248, 113, 113, 0.08); } .stat.mancha .num { color: #fca5a5; }
+    .stat.neutro { background: rgba(255, 255, 255, 0.04); } .stat.neutro .num { color: var(--text); }
+
+    .bars {
+      display: flex; height: 38px; margin-top: 20px; border-radius: 11px; overflow: hidden;
+      border: 1px solid var(--border); background: rgba(0, 0, 0, 0.25);
+      font-size: 0.88rem; font-weight: 700;
+    }
+    .bars > div {
+      display: flex; align-items: center; justify-content: center;
+      white-space: nowrap; overflow: hidden; min-width: 0;
+      transition: width 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .bar-boa { background: linear-gradient(90deg, #2f9e63, #34d399); color: #05130b; }
+    .bar-mancha { background: linear-gradient(90deg, #d95454, #f87171); color: #1c0808; }
+
+    details { margin-top: 18px; }
+    details summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+    details pre {
+      overflow: auto; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border);
+      padding: 14px; border-radius: 10px; font-size: 0.78rem; line-height: 1.5;
+    }
+
+    footer { margin-top: 26px; text-align: center; color: var(--muted); font-size: 0.82rem; }
+
+    .chip {
+      margin-top: 18px; display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 18px; border-radius: 999px; font-size: 0.88rem; font-weight: 600;
+      background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); color: var(--text);
+      transition: background 0.15s;
+    }
+    .chip svg { width: 16px; height: 16px; color: var(--green); }
+    .chip:hover { background: rgba(255, 255, 255, 0.12); }
+
+    .compare .imgwrap { cursor: zoom-in; }
+    .lightbox {
+      position: fixed; inset: 0; z-index: 60; background: rgba(4, 8, 6, 0.93);
+      display: flex; align-items: center; justify-content: center; cursor: zoom-out; padding: 18px;
+    }
+    .lightbox img { max-width: 96vw; max-height: 94dvh; border-radius: 10px; }
+
+    @media (max-width: 480px) {
+      body { padding-top: calc(28px + env(safe-area-inset-top)); }
+      .logo h1 { font-size: 1.55rem; }
+      .logo svg { width: 32px; height: 32px; }
+      header p.sub { font-size: 0.95rem; }
+      .card { padding: 16px; border-radius: 15px; }
+      .dropzone { padding: 32px 14px; }
+      .dropzone svg { width: 36px; height: 36px; }
+      .actions { flex-direction: column; align-items: stretch; }
+      .actions .primary { width: 100%; justify-content: center; padding: 14px 26px; }
+      .actions .ghost { width: 100%; padding: 13px; }
+      .preview { padding: 12px; }
+      .preview img { width: 96px; height: 96px; }
+      .stat { padding: 12px 14px; }
+      .stat .num { font-size: 1.4rem; }
+      .orb.a { width: 300px; height: 300px; }
+      .orb.b { width: 260px; height: 260px; }
+    }
+
+    @media (max-width: 560px) {
+      body { padding: 26px 14px 24px; }
+      .card { padding: 18px; }
+      .compare { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: 1fr 1fr; }
+      .stat.neutro { grid-column: span 2; flex-direction: row; align-items: baseline; justify-content: space-between; }
+      .preview { flex-direction: column; text-align: center; }
+      .preview-info { align-items: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="orb a" aria-hidden="true"></div>
+  <div class="orb b" aria-hidden="true"></div>
+
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
+      <h1>Leaf<span>Scan</span></h1>
+    </div>
+    <p class="sub">Envie a foto da planta e veja a porcentagem de área boa × contaminada</p>
+    <button class="chip" id="installBtn" type="button" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Instalar como app
+    </button>
+  </header>
+
+  <main>
+    <section class="card">
+      <input id="file" type="file" accept="image/*" capture="environment" hidden />
+      <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Selecionar foto da folha">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <p>Arraste uma foto aqui ou <span class="link">escolha um arquivo</span></p>
+        <p class="hint">JPG ou PNG — folha bem iluminada, de preferência sobre fundo neutro</p>
+      </div>
+
+      <div class="preview" id="preview" hidden>
+        <img id="previewImg" alt="Pré-visualização da foto selecionada" />
+        <div class="preview-info">
+          <span class="name" id="fileName"></span>
+          <span class="size" id="fileSize"></span>
+          <div><button class="ghost" id="changeBtn" type="button">Trocar foto</button></div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="go" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/></svg>
+          Analisar folha
+        </button>
+        <p class="erro" id="erro" role="alert"></p>
+      </div>
+    </section>
+
+    <section class="card" id="results" hidden>
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Segmentando a folha e classificando os pixels…</p>
+      </div>
+
+      <div id="report" hidden>
+        <div class="verdict" id="verdict"><span class="dot"></span><span id="verdictLabel"></span><small id="verdictDesc"></small></div>
+
+        <div class="compare">
+          <figure>
+            <div class="imgwrap"><img id="orig" alt="Foto original" /></div>
+            <figcaption>Foto original</figcaption>
+          </figure>
+          <figure>
+            <div class="imgwrap"><img id="overlay" alt="Resultado da análise" /></div>
+            <figcaption>Análise — verde = boa, vermelho = contaminada</figcaption>
+          </figure>
+        </div>
+
+        <div class="stats">
+          <div class="stat boa"><span class="label">Área boa</span><span class="num" id="pctBoa">0%</span></div>
+          <div class="stat mancha"><span class="label">Contaminada</span><span class="num" id="pctMancha">0%</span></div>
+          <div class="stat neutro"><span class="label">Folha no quadro</span><span class="num" id="pctFolha">0%</span></div>
+        </div>
+
+        <div class="bars">
+          <div class="bar-boa" id="barBoa" style="width: 50%"></div>
+          <div class="bar-mancha" id="barMancha" style="width: 50%"></div>
+        </div>
+
+        <details>
+          <summary>Resposta completa da API</summary>
+          <pre id="raw"></pre>
+        </details>
+
+        <div class="actions">
+          <button class="ghost" id="reset" type="button">Analisar outra foto</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>Protótipo — SAM2 + análise de cor HSV · processamento 100% local</footer>
+
+  <div class="lightbox" id="lightbox" hidden><img id="lightboxImg" alt="Imagem ampliada" /></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const dropzone = $("dropzone"), input = $("file"), preview = $("preview"),
+      previewImg = $("previewImg"), go = $("go"), erro = $("erro"),
+      results = $("results"), loading = $("loading"), report = $("report");
+    let objectUrl = null;
+
+    function fmtSize(bytes) {
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
+      return (bytes / (1024 * 1024)).toFixed(1).replace(".", ",") + " MB";
+    }
+
+    function showError(msg) {
+      erro.textContent = msg;
+      erro.classList.add("show");
+    }
+
+    function clearError() {
+      erro.textContent = "";
+      erro.classList.remove("show");
+    }
+
+    function setFile(file) {
+      clearError();
+      results.hidden = true;
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        showError("O arquivo selecionado não é uma imagem.");
+        return;
+      }
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = URL.createObjectURL(file);
+      previewImg.src = objectUrl;
+      $("fileName").textContent = file.name;
+      $("fileSize").textContent = fmtSize(file.size);
+      dropzone.hidden = true;
+      preview.hidden = false;
+      go.disabled = false;
+    }
+
+    dropzone.addEventListener("click", () => input.click());
+    dropzone.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") input.click(); });
+    dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("drag"); });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("drag");
+      setFile(e.dataTransfer.files[0]);
+    });
+    input.addEventListener("change", () => setFile(input.files[0]));
+    $("changeBtn").addEventListener("click", () => input.click());
+
+    function animateNum(el, target) {
+      const dur = 900, t0 = performance.now();
+      const tick = (t) => {
+        const p = Math.min(1, (t - t0) / dur);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = (target * eased).toFixed(1).replace(".", ",") + "%";
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+
+    function setVerdict(diseasedPct) {
+      const v = $("verdict"), label = $("verdictLabel"), desc = $("verdictDesc");
+      if (diseasedPct <= 5) {
+        v.className = "verdict ok";
+        label.textContent = "Folha saudável";
+        desc.textContent = "— sem danos significativos detectados";
+      } else if (diseasedPct <= 25) {
+        v.className = "verdict warn";
+        label.textContent = "Atenção";
+        desc.textContent = "— sinais de contaminação, acompanhe de perto";
+      } else {
+        v.className = "verdict bad";
+        label.textContent = "Ação recomendada";
+        desc.textContent = "— nível de contaminação elevado";
+      }
+    }
+
+    function showReport(json) {
+      $("orig").src = objectUrl;
+      $("overlay").src = json.overlay_image;
+      setVerdict(json.diseased_pct);
+      animateNum($("pctBoa"), json.healthy_pct);
+      animateNum($("pctMancha"), json.diseased_pct);
+      animateNum($("pctFolha"), json.leaf_coverage_pct);
+      $("barBoa").style.width = json.healthy_pct + "%";
+      $("barMancha").style.width = json.diseased_pct + "%";
+      $("raw").textContent = JSON.stringify(
+        { ...json, overlay_image: json.overlay_image.slice(0, 48) + "… [base64]" }, null, 2);
+      loading.hidden = true;
+      report.hidden = false;
+    }
+
+    go.addEventListener("click", async () => {
+      const file = input.files[0];
+      if (!file) return;
+      clearError();
+      go.disabled = true;
+      report.hidden = true;
+      loading.hidden = false;
+      results.hidden = false;
+      results.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const resp = await fetch("/api/analyze", { method: "POST", body: form });
+        const json = await resp.json();
+        if (!resp.ok) throw new Error(typeof json.detail === "string" ? json.detail : "erro na análise");
+        showReport(json);
+      } catch (e) {
+        results.hidden = true;
+        showError(e.message || "Falha na análise. Tente novamente.");
+      } finally {
+        go.disabled = false;
+      }
+    });
+
+    $("reset").addEventListener("click", () => {
+      input.value = "";
+      if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+      previewImg.removeAttribute("src");
+      preview.hidden = true;
+      dropzone.hidden = false;
+      results.hidden = true;
+      go.disabled = true;
+      clearError();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    const lightbox = $("lightbox"), lightboxImg = $("lightboxImg");
+    for (const id of ["orig", "overlay"]) {
+      $(id).addEventListener("click", () => {
+        lightboxImg.src = $(id).src;
+        lightbox.hidden = false;
+      });
+    }
+    lightbox.addEventListener("click", () => { lightbox.hidden = true; });
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+
+    let installEvent = null;
+    const installBtn = $("installBtn");
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      installEvent = e;
+      installBtn.hidden = false;
+    });
+    installBtn.addEventListener("click", async () => {
+      if (!installEvent) return;
+      installEvent.prompt();
+      const choice = await installEvent.userChoice;
+      if (choice && choice.outcome === "accepted") installBtn.hidden = true;
+      installEvent = null;
+    });
+  </script>
+</body>
+</html>
